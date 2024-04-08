@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="PublishConfigData" autoUpload="Always" remoteFilesAllowedToDisappearOnAutoupload="false">
+    <serverData>
+      <paths name="ma-user@dev-modelarts-cnnorth300.hblfrgzn.com:30485 key">
+        <serverdata>
+          <mappings>
+            <mapping deploy="/home/ma-user/work" local="$PROJECT_DIR$" />
+          </mappings>
+        </serverdata>
+      </paths>
+      <paths name="ma-user@dev-modelarts-cnnorth300.hblfrgzn.com:30485 key (2)">
+        <serverdata>
+          <mappings>
+            <mapping deploy="/home/ma-user/work/Pycharm_Project_1" local="$PROJECT_DIR$" />
+          </mappings>
+        </serverdata>
+      </paths>
+      <paths name="ma-user@dev-modelarts-cnnorth300.hblfrgzn.com:32489 key">
+        <serverdata>
+          <mappings>
+            <mapping deploy="/home/ma-user/work/DMFproject" local="$PROJECT_DIR$" />
+          </mappings>
+        </serverdata>
+      </paths>
+    </serverData>
+    <option name="myAutoUpload" value="ALWAYS" />
+  </component>
+</project>
