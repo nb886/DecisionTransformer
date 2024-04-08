@@ -18,11 +18,14 @@ import numpy as np
 import torch
 from mindspore import save_checkpoint, Tensor
 
-def generate_params_dict(total_layers,
-                         mindspore_params_per_layer,
-                         torch_params_per_layer,
-                         mindspore_additional_params,
-                         torch_additional_params):
+
+def generate_params_dict(
+    total_layers,
+    mindspore_params_per_layer,
+    torch_params_per_layer,
+    mindspore_additional_params,
+    torch_additional_params,
+):
     """
     Generate the total parameter mapping of mindspore and pytorch.
 
@@ -87,11 +90,13 @@ def get_converted_ckpt(mapped_params, weight_dict):
         value = weight_dict[tgt].numpy()
         # split the attention layer for q, k, v
 
-        if 'c_attn.weight' in tgt:
+        if "c_attn.weight" in tgt:
             print("tgt:", tgt)
             value = np.transpose(value, [1, 0])
 
-        print(f"Mapping table Mindspore:{src:<30} \t Torch:{tgt:<30} with shape {value.shape}")
+        print(
+            f"Mapping table Mindspore:{src:<30} \t Torch:{tgt:<30} with shape {value.shape}"
+        )
 
         new_ckpt_list.append({"data": Tensor(value), "name": src})
     return new_ckpt_list
@@ -100,33 +105,39 @@ def get_converted_ckpt(mapped_params, weight_dict):
 def split_torch_attention(state):
     s = list(state.keys())
     for name in s:
-        if name.endswith('attn.c_attn.weight') or name.endswith('attn.c_attn.bias'):
+        if name.endswith("attn.c_attn.weight") or name.endswith("attn.c_attn.bias"):
             value = state.pop(name)
             q, k, v = np.split(value.numpy(), 3, -1)
-            state[name + '.q'] = torch.tensor(q, dtype=value.dtype)
-            state[name + '.k'] = torch.tensor(k)
-            state[name + '.v'] = torch.tensor(v)
+            state[name + ".q"] = torch.tensor(q, dtype=value.dtype)
+            state[name + ".k"] = torch.tensor(k)
+            state[name + ".v"] = torch.tensor(v)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="OPT convert script")
-    parser.add_argument('--layers',
-                        type=int,
-                        default=12,
-                        help="The number of layers of the model to be converted.")
-    parser.add_argument("--torch_path",
-                        type=str,
-                        default=None,
-                        required=True,
-                        help="The torch checkpoint path.")
-    parser.add_argument("--mindspore_path",
-                        type=str,
-                        required=True,
-                        default="The output mindspore checkpoint path.",
-                        help="Use device nums, default is 128.")
+    parser.add_argument(
+        "--layers",
+        type=int,
+        default=12,
+        help="The number of layers of the model to be converted.",
+    )
+    parser.add_argument(
+        "--torch_path",
+        type=str,
+        default=None,
+        required=True,
+        help="The torch checkpoint path.",
+    )
+    parser.add_argument(
+        "--mindspore_path",
+        type=str,
+        required=True,
+        default="The output mindspore checkpoint path.",
+        help="Use device nums, default is 128.",
+    )
 
     opt = parser.parse_args()
-    state_dict = torch.load(opt.torch_path, map_location='cpu')
+    state_dict = torch.load(opt.torch_path, map_location="cpu")
     print_dict(state_dict)
 
     ms_name = [
@@ -164,7 +175,7 @@ if __name__ == '__main__':
         "h.{}.mlp.c_fc.weight",
         "h.{}.mlp.c_fc.bias",
         "h.{}.mlp.c_proj.weight",
-        "h.{}.mlp.c_proj.bias"
+        "h.{}.mlp.c_proj.bias",
     ]
 
     addition_mindspore = [
@@ -181,11 +192,13 @@ if __name__ == '__main__':
         "wpe.weight",
     ]
 
-    mapped_param = generate_params_dict(total_layers=opt.layers,
-                                        mindspore_params_per_layer=ms_name,
-                                        torch_params_per_layer=torch_name,
-                                        mindspore_additional_params=addition_mindspore,
-                                        torch_additional_params=addition_torch)
+    mapped_param = generate_params_dict(
+        total_layers=opt.layers,
+        mindspore_params_per_layer=ms_name,
+        torch_params_per_layer=torch_name,
+        mindspore_additional_params=addition_mindspore,
+        torch_additional_params=addition_torch,
+    )
     split_torch_attention(state_dict)
     new_ckpt = get_converted_ckpt(mapped_param, state_dict)
     save_checkpoint(new_ckpt, opt.mindspore_path)

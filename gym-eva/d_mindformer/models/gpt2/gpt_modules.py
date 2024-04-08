@@ -26,86 +26,88 @@ from mindformers.modules.transformer.op_parallel_config import default_dpmp_conf
 class GPTTransformerDecoderLayer(TransformerEncoderLayer):
     r"""GPT Transformer Decoder Layer.
 
-        Args:
-            batch_size(int): The batch size of the input tensor when do increnmental prediction. Should be a positive
-                value. When do training or prediction, the argument will not work and the user can just pass None to
-                the argument.
-            hidden_size(int): The hidden size of the input.
-            ffn_hidden_size(int): The hidden size of bottleneck in the feedforward layer.
-            num_heads(int): The number of the heads.
-            seq_length(int): The input sequence length.
-            attention_dropout_rate(float): The dropout rate of the attention scores. Default:0.1.
-            hidden_dropout_rate(float): The dropout rate of the final output of the layer. Default:0.1.
-            post_layernorm_residual(bool): Do residuals adds before the layernorm. Default False.
-            layernorm_compute_type(dtype.Number): The computation type of the layernorm.
-                Should be mstype.float32 or mstype.float16. Default mstype.float32.
-            softmax_compute_type(dtype.Number): The computation type of the softmax in the attention.
-                Should be mstype.float32 or mstype.float16. Default mstype.float32.
-            param_init_type(dtype.Number): The parameter initialization type of the module.
-                Should be mstype.float32 or mstype.float16. Default mstype.float32.
-            hidden_act (str, nn.Cell): The activation of the internal feedforward layer. Supports 'relu',
-                'relu6', 'tanh', 'gelu', 'fast_gelu', 'elu', 'sigmoid', 'prelu', 'leakyrelu', 'hswish',
-                'hsigmoid', 'logsigmoid' and so on. User can provide custom activition to the argument.
-                If user wants to run the net in the parallel mode, the custom activation must also provide
-                the `activation_shard` function. Please see the examples of the
-                class:`mindformers.modules.transformer.FeedForward`. Default: gelu.
-            use_past(bool): Use the past state to compute, used for incremental prediction. For example, if we have two
-                words and want to generate the ten more words. We just need to compute the two words' state only once,
-                and generate the next word one by one. When use_past is True, there are two steps to run the prediction.
-                In the first step, set the is_first_iteration to be True by
-                `model.add_flags_recursive(is_first_iteration=True)`, and pass the full inputs. Then, set the
-                is_first_iteration to be False by `model.add_flags_recursive(is_first_iteration=False)`.
-                At this moment, pass the single step's input tensor, and loop it. Default False.
-            moe_config(MoEConfig): The configuration of MoE (Mixture of Expert). Default is an instance of MoEConfig
-                with default values. Please see `MoEConfig`.
-            parallel_config(OpParallelConfig, MoEParallelConfig): The parallel configure. When MoE is applied,
-                MoEParallelConfig is effective, otherwise OpParallelConfig is effective. Default `default_dpmp_config`,
-                an instance of `OpParallelConfig` with default args.
+    Args:
+        batch_size(int): The batch size of the input tensor when do increnmental prediction. Should be a positive
+            value. When do training or prediction, the argument will not work and the user can just pass None to
+            the argument.
+        hidden_size(int): The hidden size of the input.
+        ffn_hidden_size(int): The hidden size of bottleneck in the feedforward layer.
+        num_heads(int): The number of the heads.
+        seq_length(int): The input sequence length.
+        attention_dropout_rate(float): The dropout rate of the attention scores. Default:0.1.
+        hidden_dropout_rate(float): The dropout rate of the final output of the layer. Default:0.1.
+        post_layernorm_residual(bool): Do residuals adds before the layernorm. Default False.
+        layernorm_compute_type(dtype.Number): The computation type of the layernorm.
+            Should be mstype.float32 or mstype.float16. Default mstype.float32.
+        softmax_compute_type(dtype.Number): The computation type of the softmax in the attention.
+            Should be mstype.float32 or mstype.float16. Default mstype.float32.
+        param_init_type(dtype.Number): The parameter initialization type of the module.
+            Should be mstype.float32 or mstype.float16. Default mstype.float32.
+        hidden_act (str, nn.Cell): The activation of the internal feedforward layer. Supports 'relu',
+            'relu6', 'tanh', 'gelu', 'fast_gelu', 'elu', 'sigmoid', 'prelu', 'leakyrelu', 'hswish',
+            'hsigmoid', 'logsigmoid' and so on. User can provide custom activition to the argument.
+            If user wants to run the net in the parallel mode, the custom activation must also provide
+            the `activation_shard` function. Please see the examples of the
+            class:`mindformers.modules.transformer.FeedForward`. Default: gelu.
+        use_past(bool): Use the past state to compute, used for incremental prediction. For example, if we have two
+            words and want to generate the ten more words. We just need to compute the two words' state only once,
+            and generate the next word one by one. When use_past is True, there are two steps to run the prediction.
+            In the first step, set the is_first_iteration to be True by
+            `model.add_flags_recursive(is_first_iteration=True)`, and pass the full inputs. Then, set the
+            is_first_iteration to be False by `model.add_flags_recursive(is_first_iteration=False)`.
+            At this moment, pass the single step's input tensor, and loop it. Default False.
+        moe_config(MoEConfig): The configuration of MoE (Mixture of Expert). Default is an instance of MoEConfig
+            with default values. Please see `MoEConfig`.
+        parallel_config(OpParallelConfig, MoEParallelConfig): The parallel configure. When MoE is applied,
+            MoEParallelConfig is effective, otherwise OpParallelConfig is effective. Default `default_dpmp_config`,
+            an instance of `OpParallelConfig` with default args.
 
-        Inputs:
-            - **x** (Tensor) - Float Tensor, shape should be [batch_size, seq_length, hidden_size] or
-              [batch_size * seq_length, hidden_size], if the use_past is False or is_first_iteration=True. Otherwise,
-              should be [batch_size, 1, hidden_size]
-            - **input_mask** (Tensor) - Float Tensor, If the use_past is False or is_first_iteration=True,
-              the attention mask matrix should ba [batch_size, seq_length, seq_length], or None. None means there will
-              be no mask in softmax computation. Otherwise, should be [batch_size, 1, hidden_size]
-            - **init_reset** (Tensor) - A bool tensor with shape [1], used to clear the past key parameter and
-              past value parameter used in the incremental prediction. Only valid when use_past is True. Default True.
-            - **batch_valid_length** (Tensor) - Int32 tensor with shape [batch_size] the past calculated the index.
-              Used for incremental prediction when the use_past is True. Default None.
+    Inputs:
+        - **x** (Tensor) - Float Tensor, shape should be [batch_size, seq_length, hidden_size] or
+          [batch_size * seq_length, hidden_size], if the use_past is False or is_first_iteration=True. Otherwise,
+          should be [batch_size, 1, hidden_size]
+        - **input_mask** (Tensor) - Float Tensor, If the use_past is False or is_first_iteration=True,
+          the attention mask matrix should ba [batch_size, seq_length, seq_length], or None. None means there will
+          be no mask in softmax computation. Otherwise, should be [batch_size, 1, hidden_size]
+        - **init_reset** (Tensor) - A bool tensor with shape [1], used to clear the past key parameter and
+          past value parameter used in the incremental prediction. Only valid when use_past is True. Default True.
+        - **batch_valid_length** (Tensor) - Int32 tensor with shape [batch_size] the past calculated the index.
+          Used for incremental prediction when the use_past is True. Default None.
 
-        Outputs:
-            Tuple, a tuple contains(`output`, `layer_present`).
+    Outputs:
+        Tuple, a tuple contains(`output`, `layer_present`).
 
-            - **output** (Tensor) - The float tensor of the output of the layer with
-              shape (batch_size, seq_length, hidden_size) or (batch_size * seq_length, hidden_size), if the use_past is
-              False or is_first_iteration=True. Otherwise, it will be (batch_size, 1, hidden_size)
+        - **output** (Tensor) - The float tensor of the output of the layer with
+          shape (batch_size, seq_length, hidden_size) or (batch_size * seq_length, hidden_size), if the use_past is
+          False or is_first_iteration=True. Otherwise, it will be (batch_size, 1, hidden_size)
 
-            - **layer_present** (Tuple) - A tuple of the Tensor of the projected key and value vector with
-              ((batch_size, num_heads, size_per_head, seq_length),
-              (batch_size, num_heads, seq_length, size_per_head)).
+        - **layer_present** (Tuple) - A tuple of the Tensor of the projected key and value vector with
+          ((batch_size, num_heads, size_per_head, seq_length),
+          (batch_size, num_heads, seq_length, size_per_head)).
 
-        Supported Platforms:
-            ``Ascend`` ``GPU``
+    Supported Platforms:
+        ``Ascend`` ``GPU``
     """
 
-    def __init__(self,
-                 batch_size,
-                 hidden_size,
-                 ffn_hidden_size,
-                 num_heads,
-                 seq_length,
-                 attention_dropout_rate=0.1,
-                 hidden_dropout_rate=0.1,
-                 post_layernorm_residual=False,
-                 layernorm_compute_type=mstype.float32,
-                 softmax_compute_type=mstype.float32,
-                 param_init_type=mstype.float32,
-                 hidden_act='gelu',
-                 use_past=False,
-                 moe_config=default_moe_config,
-                 parallel_config=default_dpmp_config,
-                 use_flash_attention=False):
+    def __init__(
+        self,
+        batch_size,
+        hidden_size,
+        ffn_hidden_size,
+        num_heads,
+        seq_length,
+        attention_dropout_rate=0.1,
+        hidden_dropout_rate=0.1,
+        post_layernorm_residual=False,
+        layernorm_compute_type=mstype.float32,
+        softmax_compute_type=mstype.float32,
+        param_init_type=mstype.float32,
+        hidden_act="gelu",
+        use_past=False,
+        moe_config=default_moe_config,
+        parallel_config=default_dpmp_config,
+        use_flash_attention=False,
+    ):
         super(GPTTransformerDecoderLayer, self).__init__(
             batch_size=batch_size,
             hidden_size=hidden_size,
@@ -122,7 +124,7 @@ class GPTTransformerDecoderLayer(TransformerEncoderLayer):
             use_past=use_past,
             moe_config=moe_config,
             parallel_config=parallel_config,
-            use_flash_attention=use_flash_attention
+            use_flash_attention=use_flash_attention,
         )
 
     def construct(self, x, input_mask=None, init_reset=True, batch_valid_length=None):
@@ -142,16 +144,28 @@ class GPTTransformerDecoderLayer(TransformerEncoderLayer):
 
         if self.use_past:
             # reset states, init_reset True for reuse and False for reset
-            self.assign(self.key_past, self.mul(self.key_past, F.cast(init_reset, self.dtype)))
+            self.assign(
+                self.key_past, self.mul(self.key_past, F.cast(init_reset, self.dtype))
+            )
             key_reset = self.key_past
-            self.assign(self.value_past, self.mul(self.value_past, F.cast(init_reset, self.dtype)))
+            self.assign(
+                self.value_past,
+                self.mul(self.value_past, F.cast(init_reset, self.dtype)),
+            )
             value_reset = self.value_past
             # add dependency for desired execution order
             input_x = F.depend(input_x, key_reset)
             input_x = F.depend(input_x, value_reset)
 
-        attention, layer_present = self.attention(input_x, input_x, input_x, input_mask,
-                                                  self.key_past, self.value_past, batch_valid_length)
+        attention, layer_present = self.attention(
+            input_x,
+            input_x,
+            input_x,
+            input_mask,
+            self.key_past,
+            self.value_past,
+            batch_valid_length,
+        )
         # For post-layernorm the inputs for residual path are output of self-attention and output of layernorm
         if self.post_layernorm_residual:
             x = self.add(input_x, attention)

@@ -2,30 +2,32 @@ import numpy as np
 import torch
 import torch.nn as nn
 import transformers
+
 # 导入mindformers模块
 # import mindformers
 
 
 from .model import TrajectoryModel
 from .trajectory_gpt2 import GPT2Model
+
 # from mindformers.models.gpt2.gpt2 import GPT2Model
 # from gpt2.gpt2 import GPT2Model
 
-class DecisionMindformer(TrajectoryModel):
 
+class DecisionMindformer(TrajectoryModel):
     """
     This model uses GPT to model (Return_1, state_1, action_1, Return_2, state_2, ...)
     """
 
     def __init__(
-            self,
-            state_dim,
-            act_dim,
-            hidden_size,
-            max_length=None,
-            max_ep_len=4096,
-            action_tanh=True,
-            **kwargs
+        self,
+        state_dim,
+        act_dim,
+        hidden_size,
+        max_length=None,
+        max_ep_len=4096,
+        action_tanh=True,
+        **kwargs
     ):
         super().__init__(state_dim, act_dim, max_length=max_length)
 
@@ -54,14 +56,19 @@ class DecisionMindformer(TrajectoryModel):
         # note: we don't predict states or returns for the paper
         self.predict_state = torch.nn.Linear(hidden_size, self.state_dim)
         self.predict_action = nn.Sequential(
-            *([nn.Linear(hidden_size, self.act_dim)] + ([nn.Tanh()] if action_tanh else []))
+            *(
+                [nn.Linear(hidden_size, self.act_dim)]
+                + ([nn.Tanh()] if action_tanh else [])
+            )
         )
         self.predict_return = torch.nn.Linear(hidden_size, 1)
         self.predict_reward = nn.Sequential(
             *([nn.Linear(hidden_size, 1)] + ([nn.Tanh()] if action_tanh else []))
         )
 
-    def forward(self, states, actions, rewards, returns_to_go, timesteps, attention_mask=None):
+    def forward(
+        self, states, actions, rewards, returns_to_go, timesteps, attention_mask=None
+    ):
 
         batch_size, seq_length = states.shape[0], states.shape[1]
 
@@ -70,7 +77,7 @@ class DecisionMindformer(TrajectoryModel):
             attention_mask = torch.ones((batch_size, seq_length), dtype=torch.long)
 
         # embed each modality with a different head
-        state_embeddings = self.embed_state(states)     #
+        state_embeddings = self.embed_state(states)  #
         action_embeddings = self.embed_action(actions)
         returns_embeddings = self.embed_return(returns_to_go)
         rewards_embeddings = self.embed_reward(rewards)
@@ -89,19 +96,30 @@ class DecisionMindformer(TrajectoryModel):
 
         # this makes the sequence look like (R_1, s_1, a_1, R_2, s_2, a_2, ...)
         # which works nice in an autoregressive sense since states predict actions
-        stacked_inputs = (torch.stack(
-            (returns_embeddings, state_embeddings, action_embeddings, rewards_embeddings), dim=1
-        ))
+        stacked_inputs = torch.stack(
+            (
+                returns_embeddings,
+                state_embeddings,
+                action_embeddings,
+                rewards_embeddings,
+            ),
+            dim=1,
+        )
 
-
-        stacked_inputs=stacked_inputs.permute(0, 2, 1, 3).reshape(batch_size, 4*seq_length, self.hidden_size)
+        stacked_inputs = stacked_inputs.permute(0, 2, 1, 3).reshape(
+            batch_size, 4 * seq_length, self.hidden_size
+        )
         stacked_inputs = self.embed_ln(stacked_inputs)
         # print('stacked_inputs=',stacked_inputs.shape)
 
         # to make the attention mask fit the stacked inputs, have to stack it as well
-        stacked_attention_mask = torch.stack(
-            (attention_mask, attention_mask, attention_mask, attention_mask), dim=1
-        ).permute(0, 2, 1).reshape(batch_size, 4*seq_length)
+        stacked_attention_mask = (
+            torch.stack(
+                (attention_mask, attention_mask, attention_mask, attention_mask), dim=1
+            )
+            .permute(0, 2, 1)
+            .reshape(batch_size, 4 * seq_length)
+        )
         # print(stacked_inputs.dtype)
         # print(stacked_inputs.shape)
         # print(stacked_inputs)
@@ -110,19 +128,24 @@ class DecisionMindformer(TrajectoryModel):
             inputs_embeds=stacked_inputs,
             attention_mask=stacked_attention_mask,
         )
-        x = transformer_outputs['last_hidden_state']
+        x = transformer_outputs["last_hidden_state"]
 
         # reshape x so that the second dimension corresponds to the original
         # returns (0), states (1), or actions (2); i.e. x[:,1,t] is the token for s_t
         x = x.reshape(batch_size, seq_length, 4, self.hidden_size).permute(0, 2, 1, 3)
 
         # get predictions
-        return_preds = self.predict_return(x[:,1])  # predict next return given state and action
-        state_preds = self.predict_state(x[:,2])    # predict next state given state and action
-        action_preds = self.predict_action(x[:,1])  # predict next action given state
-        reward_preds = self.predict_reward(x[:,1])  # predict next action given state    [:,2]初测效果不好
-# 5- 1211  4-2211   3-2212
-
+        return_preds = self.predict_return(
+            x[:, 1]
+        )  # predict next return given state and action
+        state_preds = self.predict_state(
+            x[:, 2]
+        )  # predict next state given state and action
+        action_preds = self.predict_action(x[:, 1])  # predict next action given state
+        reward_preds = self.predict_reward(
+            x[:, 1]
+        )  # predict next action given state    [:,2]初测效果不好
+        # 5- 1211  4-2211   3-2212
 
         return state_preds, action_preds, return_preds, reward_preds
 
@@ -188,42 +211,105 @@ class DecisionMindformer(TrajectoryModel):
         timesteps = timesteps.reshape(1, -1)
 
         if self.max_length is not None:
-            states = states[:,-self.max_length:]
-            actions = actions[:,-self.max_length:]
-            rewards= rewards[:,-self.max_length:]
-            returns_to_go = returns_to_go[:,-self.max_length:]
-            timesteps = timesteps[:,-self.max_length:]
+            states = states[:, -self.max_length :]
+            actions = actions[:, -self.max_length :]
+            rewards = rewards[:, -self.max_length :]
+            returns_to_go = returns_to_go[:, -self.max_length :]
+            timesteps = timesteps[:, -self.max_length :]
 
             # pad all tokens to sequence length
-            attention_mask = torch.cat([torch.zeros(self.max_length-states.shape[1]), torch.ones(states.shape[1])])
-            attention_mask = attention_mask.to(dtype=torch.long, device=states.device).reshape(1, -1)
+            attention_mask = torch.cat(
+                [
+                    torch.zeros(self.max_length - states.shape[1]),
+                    torch.ones(states.shape[1]),
+                ]
+            )
+            attention_mask = attention_mask.to(
+                dtype=torch.long, device=states.device
+            ).reshape(1, -1)
             states = torch.cat(
-                [torch.zeros((states.shape[0], self.max_length-states.shape[1], self.state_dim), device=states.device), states],
-                dim=1).to(dtype=torch.float32)
+                [
+                    torch.zeros(
+                        (
+                            states.shape[0],
+                            self.max_length - states.shape[1],
+                            self.state_dim,
+                        ),
+                        device=states.device,
+                    ),
+                    states,
+                ],
+                dim=1,
+            ).to(dtype=torch.float32)
             actions = torch.cat(
-                [torch.zeros((actions.shape[0], self.max_length - actions.shape[1], self.act_dim),
-                             device=actions.device), actions],
-                dim=1).to(dtype=torch.float32)
+                [
+                    torch.zeros(
+                        (
+                            actions.shape[0],
+                            self.max_length - actions.shape[1],
+                            self.act_dim,
+                        ),
+                        device=actions.device,
+                    ),
+                    actions,
+                ],
+                dim=1,
+            ).to(dtype=torch.float32)
             returns_to_go = torch.cat(
-                [torch.zeros((returns_to_go.shape[0], self.max_length-returns_to_go.shape[1], 1), device=returns_to_go.device), returns_to_go],
-                dim=1).to(dtype=torch.float32)
+                [
+                    torch.zeros(
+                        (
+                            returns_to_go.shape[0],
+                            self.max_length - returns_to_go.shape[1],
+                            1,
+                        ),
+                        device=returns_to_go.device,
+                    ),
+                    returns_to_go,
+                ],
+                dim=1,
+            ).to(dtype=torch.float32)
             rewards = torch.cat(
-                [torch.zeros((rewards.shape[0], self.max_length-rewards.shape[1], 1), device=rewards.device), rewards],
-                dim=1).to(dtype=torch.float32)
+                [
+                    torch.zeros(
+                        (rewards.shape[0], self.max_length - rewards.shape[1], 1),
+                        device=rewards.device,
+                    ),
+                    rewards,
+                ],
+                dim=1,
+            ).to(dtype=torch.float32)
             timesteps = torch.cat(
-                [torch.zeros((timesteps.shape[0], self.max_length-timesteps.shape[1]), device=timesteps.device), timesteps],
-                dim=1
+                [
+                    torch.zeros(
+                        (timesteps.shape[0], self.max_length - timesteps.shape[1]),
+                        device=timesteps.device,
+                    ),
+                    timesteps,
+                ],
+                dim=1,
             ).to(dtype=torch.long)
         else:
             attention_mask = None
         # _, action_preds_a, return_preds, reward_preds = self.forward(
         #     states, actions, rewards, returns_to_go, timesteps, attention_mask=attention_mask)
-        reward_preds_a = self.get_reward(states,actions, rewards, returns_to_go, timesteps, attention_mask=attention_mask)
-
+        reward_preds_a = self.get_reward(
+            states,
+            actions,
+            rewards,
+            returns_to_go,
+            timesteps,
+            attention_mask=attention_mask,
+        )
 
         _, action_preds_b, reward_preds_a, reward_preds = self.forward(
-            states, actions, reward_preds_a, returns_to_go, timesteps, attention_mask=attention_mask)
-
+            states,
+            actions,
+            reward_preds_a,
+            returns_to_go,
+            timesteps,
+            attention_mask=attention_mask,
+        )
 
         # _, action_preds_a, return_preds, reward_preds = self.forward(
         #     states, actions, rewards, returns_to_go, timesteps, attention_mask=attention_mask)
@@ -233,7 +319,6 @@ class DecisionMindformer(TrajectoryModel):
         #     states, actions, rewards, returns_to_go, timesteps, attention_mask=attention_mask)
         # reward_preds_b = self.get_reward(states,action_preds_b, rewards, returns_to_go, timesteps, attention_mask=attention_mask)
 
-
         # if reward_preds_a > reward_preds_b:
         #     action_preds = action_preds_a
         # else:
@@ -242,7 +327,8 @@ class DecisionMindformer(TrajectoryModel):
         action_preds = action_preds_b
 
         # print(action_preds_a[0,-1], action_preds_b[0,-1])
-        return action_preds[0,-1]
+        return action_preds[0, -1]
+
     def get_reward(self, states, actions, rewards, returns_to_go, timesteps, **kwargs):
         # we don't care about the past rewards in this modelh,
 
@@ -253,36 +339,94 @@ class DecisionMindformer(TrajectoryModel):
         timesteps = timesteps.reshape(1, -1)
 
         if self.max_length is not None:
-            states = states[:,-self.max_length:]
-            actions = actions[:,-self.max_length:]
-            rewards= rewards[:,-self.max_length:]
-            returns_to_go = returns_to_go[:,-self.max_length:]
-            timesteps = timesteps[:,-self.max_length:]
+            states = states[:, -self.max_length :]
+            actions = actions[:, -self.max_length :]
+            rewards = rewards[:, -self.max_length :]
+            returns_to_go = returns_to_go[:, -self.max_length :]
+            timesteps = timesteps[:, -self.max_length :]
 
             # pad all tokens to sequence length
-            attention_mask = torch.cat([torch.zeros(self.max_length-states.shape[1]), torch.ones(states.shape[1])])
-            attention_mask = attention_mask.to(dtype=torch.long, device=states.device).reshape(1, -1)
+            attention_mask = torch.cat(
+                [
+                    torch.zeros(self.max_length - states.shape[1]),
+                    torch.ones(states.shape[1]),
+                ]
+            )
+            attention_mask = attention_mask.to(
+                dtype=torch.long, device=states.device
+            ).reshape(1, -1)
             states = torch.cat(
-                [torch.zeros((states.shape[0], self.max_length-states.shape[1], self.state_dim), device=states.device), states],
-                dim=1).to(dtype=torch.float32)
+                [
+                    torch.zeros(
+                        (
+                            states.shape[0],
+                            self.max_length - states.shape[1],
+                            self.state_dim,
+                        ),
+                        device=states.device,
+                    ),
+                    states,
+                ],
+                dim=1,
+            ).to(dtype=torch.float32)
             actions = torch.cat(
-                [torch.zeros((actions.shape[0], self.max_length - actions.shape[1], self.act_dim),
-                             device=actions.device), actions],
-                dim=1).to(dtype=torch.float32)
+                [
+                    torch.zeros(
+                        (
+                            actions.shape[0],
+                            self.max_length - actions.shape[1],
+                            self.act_dim,
+                        ),
+                        device=actions.device,
+                    ),
+                    actions,
+                ],
+                dim=1,
+            ).to(dtype=torch.float32)
             returns_to_go = torch.cat(
-                [torch.zeros((returns_to_go.shape[0], self.max_length-returns_to_go.shape[1], 1), device=returns_to_go.device), returns_to_go],
-                dim=1).to(dtype=torch.float32)
+                [
+                    torch.zeros(
+                        (
+                            returns_to_go.shape[0],
+                            self.max_length - returns_to_go.shape[1],
+                            1,
+                        ),
+                        device=returns_to_go.device,
+                    ),
+                    returns_to_go,
+                ],
+                dim=1,
+            ).to(dtype=torch.float32)
             rewards = torch.cat(
-                [torch.zeros((rewards.shape[0], self.max_length-rewards.shape[1], 1), device=rewards.device), rewards],
-                dim=1).to(dtype=torch.float32)
+                [
+                    torch.zeros(
+                        (rewards.shape[0], self.max_length - rewards.shape[1], 1),
+                        device=rewards.device,
+                    ),
+                    rewards,
+                ],
+                dim=1,
+            ).to(dtype=torch.float32)
             timesteps = torch.cat(
-                [torch.zeros((timesteps.shape[0], self.max_length-timesteps.shape[1]), device=timesteps.device), timesteps],
-                dim=1
+                [
+                    torch.zeros(
+                        (timesteps.shape[0], self.max_length - timesteps.shape[1]),
+                        device=timesteps.device,
+                    ),
+                    timesteps,
+                ],
+                dim=1,
             ).to(dtype=torch.long)
         else:
             attention_mask = None
 
         _, action_preds, return_preds, reward_preds = self.forward(
-            states, actions, rewards, returns_to_go, timesteps, attention_mask=attention_mask)
+            states,
+            actions,
+            rewards,
+            returns_to_go,
+            timesteps,
+            attention_mask=attention_mask,
+        )
 
-        return reward_preds[0,-1]
+        return reward_preds[0, -1]

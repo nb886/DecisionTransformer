@@ -36,26 +36,27 @@ from mindformers.modules.transformer.op_parallel_config import MoEParallelConfig
 from .gpt2_config import GPT2Config
 from .gpt_modules import GPTTransformerDecoderLayer
 
-__all__ = ['GPT2LMHeadModel', 'GPT2ForSequenceClassification', 'GPT2Model', 'GPTHead']
+__all__ = ["GPT2LMHeadModel", "GPT2ForSequenceClassification", "GPT2Model", "GPTHead"]
 
 
 @MindFormerRegister.register(MindFormerModuleType.MODELS)
 class GPT2LMHeadModel(BaseModel):
     r"""
-        Provide gpt training loss or logits through network.
-        Args:
-            config (GPT2Config): The config of Gpt2Model.
+    Provide gpt training loss or logits through network.
+    Args:
+        config (GPT2Config): The config of Gpt2Model.
 
-        Returns:
-            Tensor, the loss or logits of the network.
+    Returns:
+        Tensor, the loss or logits of the network.
 
-        Examples:
-            >>> from mindformers import GPT2LMHeadModel
-            >>> model = GPT2LMHeadModel.from_pretrained('gpt2')
-            >>> type(model)
-            <class 'mindformers.models.gpt2.gpt2.GPT2LMHeadModel'>
-        """
-    _support_list = MindFormerBook.get_model_support_list()['gpt2']
+    Examples:
+        >>> from mindformers import GPT2LMHeadModel
+        >>> model = GPT2LMHeadModel.from_pretrained('gpt2')
+        >>> type(model)
+        <class 'mindformers.models.gpt2.gpt2.GPT2LMHeadModel'>
+    """
+
+    _support_list = MindFormerBook.get_model_support_list()["gpt2"]
 
     def __init__(self, config: GPT2Config = None):
         config = config if config is not None else GPT2Config()
@@ -63,27 +64,39 @@ class GPT2LMHeadModel(BaseModel):
 
         self.eos_token_id = self.config.eos_token_id
         parallel_config = self.config.parallel_config
-        self.stridedslice = P.StridedSlice().shard(((parallel_config.data_parallel, 1),))
+        self.stridedslice = P.StridedSlice().shard(
+            ((parallel_config.data_parallel, 1),)
+        )
         self.not_equal = P.NotEqual().shard(((parallel_config.data_parallel, 1), ()))
 
-        self.get_attention_mask = AttentionMask(seq_length=config.seq_length,
-                                                parallel_config=parallel_config.dp_mp_config)
+        self.get_attention_mask = AttentionMask(
+            seq_length=config.seq_length, parallel_config=parallel_config.dp_mp_config
+        )
 
         self.backbone = GPT2Model(config)
-        self.head = GPTHead(hidden_size=config.hidden_size,
-                            vocab_size=config.vocab_size,
-                            parallel_config=self.config.parallel_config)
+        self.head = GPTHead(
+            hidden_size=config.hidden_size,
+            vocab_size=config.vocab_size,
+            parallel_config=self.config.parallel_config,
+        )
         if parallel_config.pipeline_stage > 1:
             self.head.pipeline_stage = parallel_config.pipeline_stage - 1
-            self.backbone.embedding.word_embedding.embedding_table.add_pipeline_stage(self.head.pipeline_stage)
+            self.backbone.embedding.word_embedding.embedding_table.add_pipeline_stage(
+                self.head.pipeline_stage
+            )
 
         mp = config.parallel_config.model_parallel
         vocab_size = config.vocab_size
         loss_parallel_config = copy.deepcopy(parallel_config)
         if vocab_size % mp != 0:
-            logger.warning("The vocab size of GPT Loss is: %s, it is not divide by model_parallel: %s",
-                           vocab_size, mp)
-            logger.warning("Now, the model_parallel num of GPT Loss will be changed: mp = 1")
+            logger.warning(
+                "The vocab size of GPT Loss is: %s, it is not divide by model_parallel: %s",
+                vocab_size,
+                mp,
+            )
+            logger.warning(
+                "Now, the model_parallel num of GPT Loss will be changed: mp = 1"
+            )
             loss_parallel_config.model_parallel = 1
 
         self.loss = CrossEntropyLoss(parallel_config=loss_parallel_config)
@@ -96,56 +109,74 @@ class GPT2LMHeadModel(BaseModel):
         self.all_ones_attention_mask = P.Ones()((1, 1, 1), mstype.float32)
 
     def prepare_inputs_for_generation(self, input_ids, **kwargs):
-        return {
-            "input_ids": Tensor(input_ids, mstype.int32)
-        }
+        return {"input_ids": Tensor(input_ids, mstype.int32)}
 
     def prepare_inputs_for_export(self, full_model=True):
-        """ inputs for model export """
+        """inputs for model export"""
         seq_length = self.config.seq_length
         batch_size = self.config.batch_size
         if full_model:
-            logger.info('\nexporting with batch_size = %s, seq = %s ...', batch_size, seq_length)
+            logger.info(
+                "\nexporting with batch_size = %s, seq = %s ...", batch_size, seq_length
+            )
             input_ids = Tensor(np.ones((batch_size, seq_length)), mstype.int32)
             input_position = Tensor(np.ones((batch_size,)), mstype.int32)
             init_reset = Tensor([False], mstype.bool_)
             batch_valid_length = Tensor(np.ones([batch_size, 1]), mstype.int32)
         else:
-            logger.info('\nexporting with batch_size = %s, seq = 1 ...', batch_size)
+            logger.info("\nexporting with batch_size = %s, seq = 1 ...", batch_size)
             input_ids = Tensor(np.ones((batch_size, 1)), mstype.int32)
             input_position = Tensor(np.ones((batch_size,)), mstype.int32)
             init_reset = Tensor([True], mstype.bool_)
             batch_valid_length = Tensor(np.ones([batch_size, 1]), mstype.int32)
-        return input_ids, None, None, None, input_position, None, init_reset, batch_valid_length
+        return (
+            input_ids,
+            None,
+            None,
+            None,
+            input_position,
+            None,
+            init_reset,
+            batch_valid_length,
+        )
 
     # pylint: disable=W0613
-    def construct(self, input_ids, attention_mask=None, input_embeds=None, labels=None, input_position=None,
-                  position_ids=None, init_reset=True, batch_valid_length=None):
+    def construct(
+        self,
+        input_ids,
+        attention_mask=None,
+        input_embeds=None,
+        labels=None,
+        input_position=None,
+        position_ids=None,
+        init_reset=True,
+        batch_valid_length=None,
+    ):
         r"""
-            construct function for Language Modeling
+        construct function for Language Modeling
 
-            Args:
-                input_ids (Tensor): the indices of input sequence tokens in the vocabulary with data type int64/int32,
-                                    Tensor of shape :math:`(batch, seq\_length)`.
-                attention_mask (Tensor): input sentences padding mask, where 0 indicates padding position with
-                                         data type int64/int32, Tensor of shape :math:`(batch, seq\_length)`.
-                labels (Tensor): the labels of inputs with data type int64/int32, Tensor of
-                                shape :math:`(batch, seq\_length)`.
-                input_position (Tensor): the position ids of inputs (at incremental reasoning mode) which is
-                                an increasing sequence with data type int64/int32, Tensor :math:`(bacth, seq\_length)`.
-                position_ids (Tensor): the position ids of inputs which is an increasing sequence with data type
-                                    int64/int32, Tensor :math:`(bacth, seq\_length)`.
-                inputs_embeds (Tensor): the embedding of inputs with data type float32/float16, Tensor of
-                                    shape :math:`(batch, seq\_length, hidden_size)
-                init_reset (bool): A bool tensor with shape [1], used to clear the past key parameter and
-                                past value parameter used in the incremental prediction. Only valid
-                                when use_past is True. Default True.
-                batch_valid_length (Tensor): Int32 tensor with shape [batch_size] the past calculated the index.
-                                Used for incremental prediction when the use_past is True. Default None.
+        Args:
+            input_ids (Tensor): the indices of input sequence tokens in the vocabulary with data type int64/int32,
+                                Tensor of shape :math:`(batch, seq\_length)`.
+            attention_mask (Tensor): input sentences padding mask, where 0 indicates padding position with
+                                     data type int64/int32, Tensor of shape :math:`(batch, seq\_length)`.
+            labels (Tensor): the labels of inputs with data type int64/int32, Tensor of
+                            shape :math:`(batch, seq\_length)`.
+            input_position (Tensor): the position ids of inputs (at incremental reasoning mode) which is
+                            an increasing sequence with data type int64/int32, Tensor :math:`(bacth, seq\_length)`.
+            position_ids (Tensor): the position ids of inputs which is an increasing sequence with data type
+                                int64/int32, Tensor :math:`(bacth, seq\_length)`.
+            inputs_embeds (Tensor): the embedding of inputs with data type float32/float16, Tensor of
+                                shape :math:`(batch, seq\_length, hidden_size)
+            init_reset (bool): A bool tensor with shape [1], used to clear the past key parameter and
+                            past value parameter used in the incremental prediction. Only valid
+                            when use_past is True. Default True.
+            batch_valid_length (Tensor): Int32 tensor with shape [batch_size] the past calculated the index.
+                            Used for incremental prediction when the use_past is True. Default None.
 
-            Returns:
-                logits (Tensor) or loss (mstype.float32): if is_training is False, directly return the logits,
-                                                         otherwise, return the computed loss.
+        Returns:
+            logits (Tensor) or loss (mstype.float32): if is_training is False, directly return the logits,
+                                                     otherwise, return the computed loss.
         """
         if attention_mask is None:
             attention_mask = self.not_equal(input_ids, self.eos_token_id)
@@ -157,16 +188,21 @@ class GPT2LMHeadModel(BaseModel):
         if not self.training:
             tokens = input_ids
         else:
-            tokens = self.stridedslice(input_ids, (0, 0), (batch_size, seq_length - 1), (1, 1))
-            attention_mask = self.stridedslice(attention_mask, (0, 0), (batch_size, seq_length - 1), (1, 1))
+            tokens = self.stridedslice(
+                input_ids, (0, 0), (batch_size, seq_length - 1), (1, 1)
+            )
+            attention_mask = self.stridedslice(
+                attention_mask, (0, 0), (batch_size, seq_length - 1), (1, 1)
+            )
 
         attention_mask = self.get_attention_mask(attention_mask)
         if not self.is_first_iteration:
             attention_mask = self.tile(self.all_ones_attention_mask, (batch_size, 1, 1))
 
         # [batch_size, seq_length, vocab_size]
-        output_states, embedding_table = self.backbone(tokens, attention_mask, input_position, init_reset,
-                                                       batch_valid_length)
+        output_states, embedding_table = self.backbone(
+            tokens, attention_mask, input_position, init_reset, batch_valid_length
+        )
         logits = self.head(output_states, embedding_table)
 
         if not self.training:
@@ -177,7 +213,9 @@ class GPT2LMHeadModel(BaseModel):
 
             return logits, tokens, loss_mask
 
-        loss_mask = self.stridedslice(loss_mask, (0, 1), (batch_size, seq_length), (1, 1))
+        loss_mask = self.stridedslice(
+            loss_mask, (0, 1), (batch_size, seq_length), (1, 1)
+        )
         labels = self.stridedslice(input_ids, (0, 1), (batch_size, seq_length), (1, 1))
         labels = self.reshape(labels, (-1,))
         loss_mask = self.reshape(loss_mask, (-1,))
@@ -189,24 +227,27 @@ class GPT2LMHeadModel(BaseModel):
 @MindFormerRegister.register(MindFormerModuleType.MODELS)
 class GPT2ForSequenceClassification(BaseModel):
     r"""
-        Provide gpt training loss or logits through network.
-        Args:
-            config (GPT2Config): The config of Gpt2Model.
+    Provide gpt training loss or logits through network.
+    Args:
+        config (GPT2Config): The config of Gpt2Model.
 
-        Returns:
-            Tensor, the loss or logits of the network.
+    Returns:
+        Tensor, the loss or logits of the network.
 
-        Examples:
-            >>> from mindformers import GPT2ForSequenceClassification
-            >>> model = GPT2ForSequenceClassification.from_pretrained('gpt2')
-            >>> type(model)
-            <class 'mindformers.models.gpt2.gpt2.GPT2ForSequenceClassification'>
-        """
-    _support_list = MindFormerBook.get_model_support_list()['gpt2']
+    Examples:
+        >>> from mindformers import GPT2ForSequenceClassification
+        >>> model = GPT2ForSequenceClassification.from_pretrained('gpt2')
+        >>> type(model)
+        <class 'mindformers.models.gpt2.gpt2.GPT2ForSequenceClassification'>
+    """
+
+    _support_list = MindFormerBook.get_model_support_list()["gpt2"]
 
     def __init__(self, config: GPT2Config = None):
         self.config = config if config is not None else GPT2Config()
-        super(GPT2ForSequenceClassification, self).__init__(self.config, auto_prefix=True)
+        super(GPT2ForSequenceClassification, self).__init__(
+            self.config, auto_prefix=True
+        )
 
         self.eos_token = self.config.eos_token
         self.seq_length = self.config.seq_length
@@ -217,25 +258,35 @@ class GPT2ForSequenceClassification(BaseModel):
         dp = parallel_config.data_parallel
         mp = parallel_config.model_parallel
 
-        self.get_attention_mask = AttentionMask(seq_length=self.seq_length,
-                                                parallel_config=parallel_config.dp_mp_config)
+        self.get_attention_mask = AttentionMask(
+            seq_length=self.seq_length, parallel_config=parallel_config.dp_mp_config
+        )
 
         self.backbone = GPT2Model(self.config)
-        self.score = Linear(in_channels=self.hidden_size,
-                            out_channels=self.num_labels,
-                            has_bias=False,
-                            compute_dtype=self.config.compute_dtype)
+        self.score = Linear(
+            in_channels=self.hidden_size,
+            out_channels=self.num_labels,
+            has_bias=False,
+            compute_dtype=self.config.compute_dtype,
+        )
         self.score.shard(strategy_matmul=((dp, 1), (1, 1)))
         if parallel_config.pipeline_stage > 1:
             self.head.pipeline_stage = parallel_config.pipeline_stage - 1
-            self.backbone.embedding.word_embedding.embedding_table.add_pipeline_stage(self.head.pipeline_stage)
+            self.backbone.embedding.word_embedding.embedding_table.add_pipeline_stage(
+                self.head.pipeline_stage
+            )
 
         vocab_size = self.config.vocab_size
         loss_parallel_config = copy.deepcopy(parallel_config)
         if vocab_size % mp != 0:
-            logger.warning("The vocab size of GPT Loss is: %s, it is not divide by model_parallel: %s",
-                           vocab_size, mp)
-            logger.warning("Now, the model_parallel num of GPT Loss will be changed: mp = 1")
+            logger.warning(
+                "The vocab size of GPT Loss is: %s, it is not divide by model_parallel: %s",
+                vocab_size,
+                mp,
+            )
+            logger.warning(
+                "Now, the model_parallel num of GPT Loss will be changed: mp = 1"
+            )
             loss_parallel_config.model_parallel = 1
 
         self.loss = nn.CrossEntropyLoss()
@@ -249,24 +300,33 @@ class GPT2ForSequenceClassification(BaseModel):
         self.gather = P.Gather().shard(((1, 1), (1,)))
 
     # pylint: disable=W0613
-    def construct(self, input_ids, attention_mask, labels=None, input_embeds=None,
-                  input_position=None, position_ids=None, init_reset=True, batch_valid_length=None):
+    def construct(
+        self,
+        input_ids,
+        attention_mask,
+        labels=None,
+        input_embeds=None,
+        input_position=None,
+        position_ids=None,
+        init_reset=True,
+        batch_valid_length=None,
+    ):
         r"""
-            construct function for GPT2 Text Classification Model
+        construct function for GPT2 Text Classification Model
 
-            Args:
-                input_ids (Tensor): the indices of input sequence tokens in the vocabulary.
-                attention_mask (Tensor): input sentences padding mask, where 0 indicates padding position.
-                labels (Tensor): the labels of corresponding input sequences.
-                input_embeds(Tensor): Reserved param, not used.
-                input_position(Tensor): Reserved param, not used.
-                position_ids(Tensor): Reserved param, not used.
-                init_reset(Tensor): Reserved param, not used.
-                batch_valid_length(Tensor): Reserved param, not used.
+        Args:
+            input_ids (Tensor): the indices of input sequence tokens in the vocabulary.
+            attention_mask (Tensor): input sentences padding mask, where 0 indicates padding position.
+            labels (Tensor): the labels of corresponding input sequences.
+            input_embeds(Tensor): Reserved param, not used.
+            input_position(Tensor): Reserved param, not used.
+            position_ids(Tensor): Reserved param, not used.
+            init_reset(Tensor): Reserved param, not used.
+            batch_valid_length(Tensor): Reserved param, not used.
 
-            Returns:
-                (logits, labels) (Tensor, Tensor) or logits (Tensor) or loss (mstype.float32): in train mode,
-                return loss; in eval mode, return logits and loss; in predict mode, return logits.
+        Returns:
+            (logits, labels) (Tensor, Tensor) or logits (Tensor) or loss (mstype.float32): in train mode,
+            return loss; in eval mode, return logits and loss; in predict mode, return logits.
         """
 
         attention_mask = self.cast(attention_mask, mstype.float32)
@@ -280,8 +340,12 @@ class GPT2ForSequenceClassification(BaseModel):
         # get the last logit of each sequence
         last_indices = self.sub(self.reduce_sum(attention_mask, -1), 1)
         batch_size = attention_mask.shape[0]
-        indices_increments = Tensor(np.arange(0, self.seq_length * batch_size, self.seq_length))
-        last_indices = self.cast(self.add(last_indices, indices_increments), mstype.int32)
+        indices_increments = Tensor(
+            np.arange(0, self.seq_length * batch_size, self.seq_length)
+        )
+        last_indices = self.cast(
+            self.add(last_indices, indices_increments), mstype.int32
+        )
         pooled_logits = self.gather(logits, last_indices, 0)
 
         if labels is not None:
@@ -306,29 +370,41 @@ class GPTEmbeddingLayer(nn.Cell):
         embedding_mp = config.parallel_config.embedding_dp_mp_config.model_parallel
         vocab_size = config.vocab_size
         if vocab_size % embedding_mp != 0:
-            logger.warning("The vocab size of embedding layer is: %s, it is not divide by model_parallel: %s",
-                           vocab_size, embedding_mp)
+            logger.warning(
+                "The vocab size of embedding layer is: %s, it is not divide by model_parallel: %s",
+                vocab_size,
+                embedding_mp,
+            )
             logger.warning("Now, model_parallel will be changed: mp = 1")
             parallel_config.embedding_dp_mp_config.model_parallel = 1
 
-        self.word_embedding = VocabEmbedding(vocab_size=vocab_size,
-                                             embedding_size=config.hidden_size,
-                                             param_init=initializer('normal',
-                                                                    [vocab_size, config.hidden_size],
-                                                                    dtype=mstype.float32),
-                                             parallel_config=parallel_config.embedding_dp_mp_config)
+        self.word_embedding = VocabEmbedding(
+            vocab_size=vocab_size,
+            embedding_size=config.hidden_size,
+            param_init=initializer(
+                "normal", [vocab_size, config.hidden_size], dtype=mstype.float32
+            ),
+            parallel_config=parallel_config.embedding_dp_mp_config,
+        )
         new_parallel_config = copy.deepcopy(parallel_config)
         new_parallel_config.vocab_emb_dp = True
 
-        self.position_embedding = VocabEmbedding(vocab_size=config.max_position_embeddings,
-                                                 embedding_size=config.hidden_size,
-                                                 param_init=initializer('normal',
-                                                                        [config.max_position_embeddings,
-                                                                         config.hidden_size],
-                                                                        dtype=mstype.float32),
-                                                 parallel_config=new_parallel_config.embedding_dp_mp_config)
+        self.position_embedding = VocabEmbedding(
+            vocab_size=config.max_position_embeddings,
+            embedding_size=config.hidden_size,
+            param_init=initializer(
+                "normal",
+                [config.max_position_embeddings, config.hidden_size],
+                dtype=mstype.float32,
+            ),
+            parallel_config=new_parallel_config.embedding_dp_mp_config,
+        )
         self.add = P.Add().shard(
-            ((parallel_config.data_parallel, 1, 1), (parallel_config.data_parallel, 1, 1)))
+            (
+                (parallel_config.data_parallel, 1, 1),
+                (parallel_config.data_parallel, 1, 1),
+            )
+        )
         self.dropout = Dropout(1 - config.embedding_dropout_prob)
         self.dropout.shard(((parallel_config.data_parallel, 1, 1),))
 
@@ -341,16 +417,18 @@ class GPTEmbeddingLayer(nn.Cell):
         return embedding, word_table
 
 
-def set_parallel_configure_for_layer(network, layer_id, offset, parallel_config, layers):
+def set_parallel_configure_for_layer(
+    network, layer_id, offset, parallel_config, layers
+):
     r"""
-        Default setting for the pipeline is: `(layer_id + offset) // (layers / pipeline_stage)`.
+    Default setting for the pipeline is: `(layer_id + offset) // (layers / pipeline_stage)`.
 
-        Args:
-            network(Cell) - Represents the transformer block
-            parallel_config(dict) - Parallel Config
-            layer_id(int) - Means the layer index for the current module, counts from zero.
-            offset(int) - Means the layer_index needs a offset, if there are other modules in the net.
-            layers(int) - The total layers used for the model.
+    Args:
+        network(Cell) - Represents the transformer block
+        parallel_config(dict) - Parallel Config
+        layer_id(int) - Means the layer index for the current module, counts from zero.
+        offset(int) - Means the layer_index needs a offset, if there are other modules in the net.
+        layers(int) - The total layers used for the model.
     """
     pp_dis = max(int((layers + 1) / parallel_config.pipeline_stage), 1)
     pp_id = min((layer_id + offset) // pp_dis, parallel_config.pipeline_stage - 1)
@@ -367,7 +445,9 @@ def set_parallel_configure_for_layer(network, layer_id, offset, parallel_config,
             network.recompute()
     else:
         if parallel_config.recompute.recompute:
-            network.recompute(recompute_slice_activation=parallel_config.recompute.recompute_slice_activation)
+            network.recompute(
+                recompute_slice_activation=parallel_config.recompute.recompute_slice_activation
+            )
 
 
 class GPT2Model(nn.Cell):
@@ -393,24 +473,32 @@ class GPT2Model(nn.Cell):
         self.embedding = GPTEmbeddingLayer(config)
         self.embedding.pipeline_stage = 0
 
-        self.layernorm = LayerNorm((config.hidden_size,)).to_float(config.layernorm_compute_type)
+        self.layernorm = LayerNorm((config.hidden_size,)).to_float(
+            config.layernorm_compute_type
+        )
         if config.parallel_config.pipeline_stage > 1:
             self.layernorm.set_comm_fusion(2)
         else:
-            self.layernorm.set_comm_fusion(config.parallel_config.gradient_aggregation_group)
+            self.layernorm.set_comm_fusion(
+                config.parallel_config.gradient_aggregation_group
+            )
         self.layernorm.shard(((config.parallel_config.data_parallel, 1),))
         self.layernorm.pipeline_stage = config.parallel_config.pipeline_stage - 1
 
         if not hasattr(config, "moe_config"):
             config.moe_config = default_moe_config
 
-        self.use_moe = (config.moe_config.expert_num > 1)
+        self.use_moe = config.moe_config.expert_num > 1
         if self.use_moe:
-            moe_parallel_config = MoEParallelConfig(data_parallel=config.parallel_config.data_parallel,
-                                                    model_parallel=config.parallel_config.model_parallel,
-                                                    expert_parallel=config.parallel_config.expert_parallel)
+            moe_parallel_config = MoEParallelConfig(
+                data_parallel=config.parallel_config.data_parallel,
+                model_parallel=config.parallel_config.model_parallel,
+                expert_parallel=config.parallel_config.expert_parallel,
+            )
         if config.moe_config.save_token_distribution:
-            moe_config = [copy.deepcopy(config.moe_config) for i in range(config.num_layers)]
+            moe_config = [
+                copy.deepcopy(config.moe_config) for i in range(config.num_layers)
+            ]
             for i in range(config.num_layers):
                 moe_config[i].cur_layer = i
         else:
@@ -430,14 +518,26 @@ class GPT2Model(nn.Cell):
                 param_init_type=config.param_init_type,
                 layernorm_compute_type=config.layernorm_compute_type,
                 softmax_compute_type=config.softmax_compute_type,
-                parallel_config=config.parallel_config.dp_mp_config if not self.use_moe else moe_parallel_config,
-                moe_config=moe_config if not config.moe_config.save_token_distribution else moe_config[i],
+                parallel_config=(
+                    config.parallel_config.dp_mp_config
+                    if not self.use_moe
+                    else moe_parallel_config
+                ),
+                moe_config=(
+                    moe_config
+                    if not config.moe_config.save_token_distribution
+                    else moe_config[i]
+                ),
                 use_past=config.use_past,
                 use_flash_attention=config.use_flash_attention,
             )
             set_parallel_configure_for_layer(
-                block, layer_id=i, layers=config.num_layers,
-                offset=0, parallel_config=config.parallel_config)
+                block,
+                layer_id=i,
+                layers=config.num_layers,
+                offset=0,
+                parallel_config=config.parallel_config,
+            )
             self.blocks.append(block)
 
         self.cast = P.Cast()
@@ -450,7 +550,14 @@ class GPT2Model(nn.Cell):
         if self.use_past:
             self.ones = P.Ones()
 
-    def construct(self, input_ids, attention_mask, input_position=None, init_reset=True, batch_valid_length=None):
+    def construct(
+        self,
+        input_ids,
+        attention_mask,
+        input_position=None,
+        init_reset=True,
+        batch_valid_length=None,
+    ):
         """GPT model"""
         batch_size, seq_length = F.shape(input_ids)
         if self.use_past:
@@ -481,10 +588,14 @@ class GPT2Model(nn.Cell):
 
         if self.use_moe:
             for i in range(self.num_layers):
-                hidden_states, _ = self.blocks[i](hidden_states, attention_mask, init_reset, batch_valid_length)
+                hidden_states, _ = self.blocks[i](
+                    hidden_states, attention_mask, init_reset, batch_valid_length
+                )
         else:
             for i in range(self.num_layers):
-                hidden_states = self.blocks[i](hidden_states, attention_mask, init_reset, batch_valid_length)
+                hidden_states = self.blocks[i](
+                    hidden_states, attention_mask, init_reset, batch_valid_length
+                )
 
         output_state = self.layernorm(hidden_states)
 
@@ -494,33 +605,44 @@ class GPT2Model(nn.Cell):
 class GPTHead(nn.Cell):
     r"""Head for GPT to get the logits of each token in the vocab."""
 
-    def __init__(self,
-                 hidden_size,
-                 vocab_size,
-                 compute_type=mstype.float16,
-                 parallel_config=None):
+    def __init__(
+        self, hidden_size, vocab_size, compute_type=mstype.float16, parallel_config=None
+    ):
         super().__init__()
         copied_parallel_config = copy.deepcopy(parallel_config)
         mp = copied_parallel_config.model_parallel
         if vocab_size % mp != 0:
-            logger.warning("The vocab size of GPTHead MatMul is: %s, it is not divide by model_parallel: %s",
-                           vocab_size, mp)
-            logger.warning("Now, the model_parallel num of GPTHead MatMul will be changed: mp = 1")
+            logger.warning(
+                "The vocab size of GPTHead MatMul is: %s, it is not divide by model_parallel: %s",
+                vocab_size,
+                mp,
+            )
+            logger.warning(
+                "Now, the model_parallel num of GPTHead MatMul will be changed: mp = 1"
+            )
             copied_parallel_config.model_parallel = 1
 
         if copied_parallel_config.pipeline_stage > 1:
             copied_parallel_config.vocab_emb_dp = False
         if copied_parallel_config.vocab_emb_dp:
-            self.matmul = P.MatMul(transpose_b=True).shard(((copied_parallel_config.data_parallel, 1), (1, 1)))
+            self.matmul = P.MatMul(transpose_b=True).shard(
+                ((copied_parallel_config.data_parallel, 1), (1, 1))
+            )
         else:
-            self.matmul = P.MatMul(transpose_b=True).shard(((copied_parallel_config.data_parallel, 1), (
-                copied_parallel_config.model_parallel, 1)))
+            self.matmul = P.MatMul(transpose_b=True).shard(
+                (
+                    (copied_parallel_config.data_parallel, 1),
+                    (copied_parallel_config.model_parallel, 1),
+                )
+            )
         self.hidden_size = hidden_size
         self.dtype = compute_type
         self.cast = P.Cast()
 
     def construct(self, state, embedding_table):
-        logits = self.matmul(self.cast(state, self.dtype), self.cast(embedding_table, self.dtype))
+        logits = self.matmul(
+            self.cast(state, self.dtype), self.cast(embedding_table, self.dtype)
+        )
         return logits
 
 
@@ -562,20 +684,26 @@ class CrossEntropyCalculationWithMask(nn.Cell):
         logits = self.log_softmax(logits)
 
         if self.is_training:
-            label_ids = self.reshape(label_ids, self.last_idx)  # label_ids [batch * (seq_length-1)]
-            one_hot_labels = self.onehot(label_ids, self.num_labels, self.on_value,
-                                         self.off_value)  # [batch * (seq_length-1), vocab_size]
+            label_ids = self.reshape(
+                label_ids, self.last_idx
+            )  # label_ids [batch * (seq_length-1)]
+            one_hot_labels = self.onehot(
+                label_ids, self.num_labels, self.on_value, self.off_value
+            )  # [batch * (seq_length-1), vocab_size]
             per_example_loss = self.neg(
-                self.reduce_sum(one_hot_labels * logits, self.last_idx))  # [batch * (seq_length-1)]
+                self.reduce_sum(one_hot_labels * logits, self.last_idx)
+            )  # [batch * (seq_length-1)]
 
             # for PPL calculation in evaluation
             if input_mask is not None:
-                input_mask = self.cast(self.reshape(input_mask, self.last_idx),
-                                       mstype.float32)  # [batch * (seq_length-1)]
+                input_mask = self.cast(
+                    self.reshape(input_mask, self.last_idx), mstype.float32
+                )  # [batch * (seq_length-1)]
 
                 valid_loss_sum = self.reduce_sum(input_mask * per_example_loss, ())
-                valid_element_sum = self.reduce_sum(input_mask, ()) + self.cast(F.tuple_to_array((1e-5,)),
-                                                                                mstype.float32)
+                valid_element_sum = self.reduce_sum(input_mask, ()) + self.cast(
+                    F.tuple_to_array((1e-5,)), mstype.float32
+                )
                 loss = valid_loss_sum / valid_element_sum
             else:
                 loss = self.reduce_mean(per_example_loss, self.last_idx)  # a number

@@ -15,14 +15,17 @@
 """Gpt Config API."""
 
 from mindformers.modules.transformer.moe import MoEConfig
-from mindformers.modules.transformer.transformer import default_transformer_config, default_moe_config, \
-    TransformerOpParallelConfig
+from mindformers.modules.transformer.transformer import (
+    default_transformer_config,
+    default_moe_config,
+    TransformerOpParallelConfig,
+)
 from mindformers.tools.register import MindFormerRegister, MindFormerModuleType
 from ..utils import convert_mstype
 from ..base_config import BaseConfig
 from ...mindformer_book import MindFormerBook
 
-__all__ = ['GPT2Config']
+__all__ = ["GPT2Config"]
 
 
 @MindFormerRegister.register(MindFormerModuleType.CONFIG)
@@ -96,43 +99,45 @@ class GPT2Config(BaseConfig):
         Class, GPT2Config.
     """
 
-    _support_list = MindFormerBook.get_config_support_list()['gpt2']
+    _support_list = MindFormerBook.get_config_support_list()["gpt2"]
 
-    def __init__(self,
-                 batch_size: int = 1,
-                 eos_token_id: int = 50256,
-                 pad_token_id: int = 50256,
-                 bos_token_id: int = 50256,
-                 unk_token_id: int = 50256,
-                 seq_length: int = 1024,
-                 max_position_embeddings: int = None,
-                 vocab_size: int = 50257,
-                 hidden_size: int = 768,
-                 num_layers: int = 12,
-                 num_heads: int = 12,
-                 num_labels: int = 2,
-                 expand_ratio: int = 4,
-                 embedding_dropout_prob: float = 0.1,
-                 hidden_dropout_rate: float = 0.1,
-                 attention_dropout_rate: float = 0.1,
-                 param_init_type: str = "float32",
-                 layernorm_compute_type: str = "float32",
-                 softmax_compute_type: str = "float32",
-                 compute_dtype: str = "float16",
-                 hidden_act: str = 'gelu',
-                 use_past: bool = False,
-                 post_layernorm_residual: bool = False,
-                 offset: int = 0,
-                 parallel_config: TransformerOpParallelConfig = default_transformer_config,
-                 checkpoint_name_or_path: str = "",
-                 moe_config: MoEConfig = default_moe_config,
-                 repetition_penalty: float = 1.0,
-                 max_decode_length: int = 1024,
-                 top_k: int = 5,
-                 top_p: float = 1.0,
-                 do_sample: bool = True,
-                 use_flash_attention: bool = False,
-                 **kwargs):
+    def __init__(
+        self,
+        batch_size: int = 1,
+        eos_token_id: int = 50256,
+        pad_token_id: int = 50256,
+        bos_token_id: int = 50256,
+        unk_token_id: int = 50256,
+        seq_length: int = 1024,
+        max_position_embeddings: int = None,
+        vocab_size: int = 50257,
+        hidden_size: int = 768,
+        num_layers: int = 12,
+        num_heads: int = 12,
+        num_labels: int = 2,
+        expand_ratio: int = 4,
+        embedding_dropout_prob: float = 0.1,
+        hidden_dropout_rate: float = 0.1,
+        attention_dropout_rate: float = 0.1,
+        param_init_type: str = "float32",
+        layernorm_compute_type: str = "float32",
+        softmax_compute_type: str = "float32",
+        compute_dtype: str = "float16",
+        hidden_act: str = "gelu",
+        use_past: bool = False,
+        post_layernorm_residual: bool = False,
+        offset: int = 0,
+        parallel_config: TransformerOpParallelConfig = default_transformer_config,
+        checkpoint_name_or_path: str = "",
+        moe_config: MoEConfig = default_moe_config,
+        repetition_penalty: float = 1.0,
+        max_decode_length: int = 1024,
+        top_k: int = 5,
+        top_p: float = 1.0,
+        do_sample: bool = True,
+        use_flash_attention: bool = False,
+        **kwargs
+    ):
         super(GPT2Config, self).__init__(**kwargs)
         self.batch_size = batch_size
         self.eos_token_id = eos_token_id

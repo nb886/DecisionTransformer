@@ -21,7 +21,8 @@ from ..base_tokenizer import BaseTokenizer
 from ..base_processor import BaseProcessor
 from ...tools.register import MindFormerRegister, MindFormerModuleType
 
-__all__ = ['GPT2Processor']
+__all__ = ["GPT2Processor"]
+
 
 @MindFormerRegister.register(MindFormerModuleType.PROCESSOR)
 class GPT2Processor(BaseProcessor):
@@ -47,15 +48,17 @@ class GPT2Processor(BaseProcessor):
             - `'np'`: Return Numpy `np.ndarray` objects.
             - `'ms'`: Return Numpy `ms.Tensor` objects.
     """
-    _support_list = MindFormerBook.get_processor_support_list()['gpt2']
 
-    def __init__(self, tokenizer=None,
-                 max_length=128, padding='max_length', return_tensors='ms'):
+    _support_list = MindFormerBook.get_processor_support_list()["gpt2"]
+
+    def __init__(
+        self, tokenizer=None, max_length=128, padding="max_length", return_tensors="ms"
+    ):
         super(GPT2Processor, self).__init__(
             tokenizer=tokenizer,
             max_length=max_length,
             padding=padding,
-            return_tensors=return_tensors
+            return_tensors=return_tensors,
         )
 
     def __call__(self, text_input=None, image_input=None):
@@ -63,13 +66,18 @@ class GPT2Processor(BaseProcessor):
         output = {}
         if text_input is not None and self.tokenizer:
             if not isinstance(self.tokenizer, BaseTokenizer):
-                raise TypeError(f"tokenizer should inherited from the BaseTokenizer,"
-                                f" but got {type(self.tokenizer)}.")
+                raise TypeError(
+                    f"tokenizer should inherited from the BaseTokenizer,"
+                    f" but got {type(self.tokenizer)}."
+                )
             # Format the input into a batch
             if isinstance(text_input, str):
                 text_input = [text_input]
-            text_output = self.tokenizer(text_input, return_tensors=self.return_tensors,
-                                         max_length=self.max_length,
-                                         padding=self.padding)["input_ids"]
-            output['text'] = text_output
+            text_output = self.tokenizer(
+                text_input,
+                return_tensors=self.return_tensors,
+                max_length=self.max_length,
+                padding=self.padding,
+            )["input_ids"]
+            output["text"] = text_output
         return output

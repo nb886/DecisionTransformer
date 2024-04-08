@@ -27,7 +27,7 @@ from ..base_fast_tokenizer import PreTrainedTokenizerFast
 from .gpt2_tokenizer import GPT2Tokenizer
 from ...mindformer_book import MindFormerBook
 
-__all__ = ['GPT2TokenizerFast']
+__all__ = ["GPT2TokenizerFast"]
 
 
 VOCAB_FILES_NAMES = {
@@ -90,21 +90,21 @@ class GPT2TokenizerFast(PreTrainedTokenizerFast):
 
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "token_type_ids", "attention_mask"]
-    FILE_LIST = ['tokenizer_config.json']
-    _support_list = MindFormerBook.get_tokenizer_support_list()['gpt2']
+    FILE_LIST = ["tokenizer_config.json"]
+    _support_list = MindFormerBook.get_tokenizer_support_list()["gpt2"]
     slow_tokenizer_class = GPT2Tokenizer
 
     def __init__(
-            self,
-            vocab_file=None,
-            merges_file=None,
-            tokenizer_file=None,
-            unk_token="<|endoftext|>",
-            bos_token="<|endoftext|>",
-            pad_token="<|endoftext|>",
-            eos_token="<|endoftext|>",
-            add_prefix_space=False,
-            **kwargs,
+        self,
+        vocab_file=None,
+        merges_file=None,
+        tokenizer_file=None,
+        unk_token="<|endoftext|>",
+        bos_token="<|endoftext|>",
+        pad_token="<|endoftext|>",
+        eos_token="<|endoftext|>",
+        add_prefix_space=False,
+        **kwargs,
     ):
         super().__init__(
             vocab_file,
@@ -133,24 +133,24 @@ class GPT2TokenizerFast(PreTrainedTokenizerFast):
             logger.warning("For GPT2TokenizerFast, add_eos_token is not invalid now.")
 
     def _batch_encode_plus(
-            self,
-            batch_text_or_text_pairs,
-            add_special_tokens: bool = True,
-            padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
-            truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
-            max_length: Optional[int] = None,
-            stride: int = 0,
-            is_split_into_words: bool = False,
-            pad_to_multiple_of: Optional[int] = None,
-            return_tensors: Optional[str] = None,
-            return_token_type_ids: Optional[bool] = None,
-            return_attention_mask: Optional[bool] = None,
-            return_overflowing_tokens: bool = False,
-            return_special_tokens_mask: bool = False,
-            return_offsets_mapping: bool = False,
-            return_length: bool = False,
-            verbose: bool = True,
-            **kwargs
+        self,
+        batch_text_or_text_pairs,
+        add_special_tokens: bool = True,
+        padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
+        truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
+        max_length: Optional[int] = None,
+        stride: int = 0,
+        is_split_into_words: bool = False,
+        pad_to_multiple_of: Optional[int] = None,
+        return_tensors: Optional[str] = None,
+        return_token_type_ids: Optional[bool] = None,
+        return_attention_mask: Optional[bool] = None,
+        return_overflowing_tokens: bool = False,
+        return_special_tokens_mask: bool = False,
+        return_offsets_mapping: bool = False,
+        return_length: bool = False,
+        verbose: bool = True,
+        **kwargs,
     ) -> BatchEncoding:
         is_split_into_words = kwargs.get("is_split_into_words", False)
         assert self.add_prefix_space or not is_split_into_words, (
@@ -175,29 +175,30 @@ class GPT2TokenizerFast(PreTrainedTokenizerFast):
             return_offsets_mapping,
             return_length,
             verbose,
-            **kwargs
+            **kwargs,
         )
 
     def _encode_plus(
-            self,
-            text,
-            text_pair=None,
-            add_special_tokens: bool = True,
-            padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
-            truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
-            max_length: Optional[int] = None,
-            stride: int = 0,
-            is_split_into_words: bool = False,
-            pad_to_multiple_of: Optional[int] = None,
-            return_tensors: Optional[bool] = None,
-            return_token_type_ids: Optional[bool] = None,
-            return_attention_mask: Optional[bool] = None,
-            return_overflowing_tokens: bool = False,
-            return_special_tokens_mask: bool = False,
-            return_offsets_mapping: bool = False,
-            return_length: bool = False,
-            verbose: bool = True,
-            **kwargs) -> BatchEncoding:
+        self,
+        text,
+        text_pair=None,
+        add_special_tokens: bool = True,
+        padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
+        truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
+        max_length: Optional[int] = None,
+        stride: int = 0,
+        is_split_into_words: bool = False,
+        pad_to_multiple_of: Optional[int] = None,
+        return_tensors: Optional[bool] = None,
+        return_token_type_ids: Optional[bool] = None,
+        return_attention_mask: Optional[bool] = None,
+        return_overflowing_tokens: bool = False,
+        return_special_tokens_mask: bool = False,
+        return_offsets_mapping: bool = False,
+        return_length: bool = False,
+        verbose: bool = True,
+        **kwargs,
+    ) -> BatchEncoding:
         is_split_into_words = kwargs.get("is_split_into_words", False)
 
         assert self.add_prefix_space or not is_split_into_words, (
@@ -223,8 +224,11 @@ class GPT2TokenizerFast(PreTrainedTokenizerFast):
             return_offsets_mapping,
             return_length,
             verbose,
-            **kwargs)
+            **kwargs,
+        )
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(
+        self, save_directory: str, filename_prefix: Optional[str] = None
+    ) -> Tuple[str]:
         files = self._tokenizer.model.save(save_directory, name=filename_prefix)
         return tuple(files)
